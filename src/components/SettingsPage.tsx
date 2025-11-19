@@ -35,7 +35,6 @@ interface ClientConfig {
   frequence: string | null;
   heure_envoi: string | null;
   canaux_diffusion: string[];
-  alertes_temps_reel: boolean;
   status_onboarding: string;
   email_destinataires: string[];
   email_cc: string[];
@@ -64,7 +63,6 @@ export default function SettingsPage({ onNavigateToDashboard }: SettingsPageProp
   const [frequence, setFrequence] = useState('');
   const [heureEnvoi, setHeureEnvoi] = useState('');
   const [canauxDiffusion, setCanauxDiffusion] = useState<string[]>([]);
-  const [alertesTempsReel, setAlertesTempsReel] = useState(false);
   const [emailDestinataires, setEmailDestinataires] = useState<string[]>([]);
   const [emailCc, setEmailCc] = useState<string[]>([]);
 
@@ -112,13 +110,19 @@ export default function SettingsPage({ onNavigateToDashboard }: SettingsPageProp
         setSourcesVeille(data.sources_veille || []);
         setFrequence(data.frequence || '');
         setHeureEnvoi(data.heure_envoi || '');
-        // Normaliser les canaux pour éviter les doublons (Email, WhatsApp avec majuscule)
-        const normalizedCanaux = (data.canaux_diffusion || []).map((canal: string) =>
-          canal.charAt(0).toUpperCase() + canal.slice(1).toLowerCase()
-        );
-        // Supprimer les doublons
+
+        // Charger et normaliser les canaux depuis la BDD
+        // Convertir les anciennes valeurs (Email, Whatsapp) vers les nouvelles (email, whatsapp_pdf, whatsapp_podcast)
+        const rawCanaux = data.canaux_diffusion || [];
+        const normalizedCanaux = rawCanaux.map((canal: string) => {
+          // Convertir "Email" -> "email"
+          if (canal.toLowerCase() === 'email') return 'email';
+          // Convertir "Whatsapp" -> "whatsapp_pdf" (par défaut)
+          if (canal.toLowerCase() === 'whatsapp') return 'whatsapp_pdf';
+          // Garder les autres valeurs telles quelles (whatsapp_pdf, whatsapp_podcast)
+          return canal;
+        });
         setCanauxDiffusion([...new Set(normalizedCanaux)]);
-        setAlertesTempsReel(data.alertes_temps_reel || false);
 
         // Ajouter automatiquement l'email personnel dans les destinataires
         const destinataires = data.email_destinataires || [];
@@ -176,7 +180,6 @@ export default function SettingsPage({ onNavigateToDashboard }: SettingsPageProp
         frequence,
         heure_envoi: heureEnvoi,
         canaux_diffusion: canauxDiffusion,
-        alertes_temps_reel: alertesTempsReel,
         email_destinataires: finalDestinataires,
         email_cc: emailCc,
         whatsapp: whatsappPhone && whatsappPhone.length > 3 ? whatsappPhone : null,
@@ -232,10 +235,8 @@ export default function SettingsPage({ onNavigateToDashboard }: SettingsPageProp
       // Mettre à jour l'état local avec les destinataires finaux
       setEmailDestinataires(finalDestinataires);
 
+      // Afficher le modal de succès (l'utilisateur devra cliquer sur OK pour fermer)
       setSaveSuccess(true);
-      setTimeout(() => {
-        setSaveSuccess(false);
-      }, 3000);
     } catch (error) {
       console.error('❌ EXCEPTION:', error);
       alert('Erreur lors de la sauvegarde: ' + error);
@@ -376,53 +377,36 @@ export default function SettingsPage({ onNavigateToDashboard }: SettingsPageProp
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50/30 via-peach-50 to-orange-100/40">
-      {/* Header */}
-      <div className="bg-white/95 backdrop-blur-sm border-b border-orange-100 px-6 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="bg-gradient-to-br from-orange-500 to-coral-500 p-2 rounded-lg">
-            <Bell className="w-5 h-5 text-white" />
-          </div>
-          <span className="text-gray-900 font-bold text-xl">VEILLE IA</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={onNavigateToDashboard}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-orange-50 rounded-xl transition-all font-medium"
-          >
-            <ArrowLeft size={16} />
-            Retour au tableau de bord
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-orange-500 to-coral-500 rounded-full flex items-center justify-center text-white font-bold">
-              {user?.email?.[0].toUpperCase()}
-            </div>
-            <div className="text-sm font-medium text-gray-900">
-              {prenom || user?.email}
-            </div>
-          </div>
-          <button
-            onClick={signOut}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-orange-50 rounded-xl transition-all font-medium"
-          >
-            <LogOut size={16} />
-            Déconnexion
-          </button>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="max-w-5xl mx-auto px-6 py-8">
+    <div className="max-w-5xl mx-auto px-6 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Paramètres de veille</h1>
           <p className="text-gray-600">Modifiez votre configuration à tout moment</p>
         </div>
 
-        {/* Success Message */}
+        {/* Modal de succès */}
         {saveSuccess && (
-          <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
-            <CheckCircle2 className="w-5 h-5 text-green-600" />
-            <span className="text-green-800 font-medium">Configuration sauvegardée avec succès !</span>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fadeIn">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md mx-4 animate-slideInUp">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                  <CheckCircle2 className="w-6 h-6 text-green-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">
+                    Enregistré avec succès !
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-6">
+                    Votre configuration a été mise à jour avec succès.
+                  </p>
+                  <button
+                    onClick={() => setSaveSuccess(false)}
+                    className="w-full px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-green-500 to-green-600 hover:shadow-lg rounded-lg transition-all"
+                  >
+                    OK
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -861,37 +845,35 @@ export default function SettingsPage({ onNavigateToDashboard }: SettingsPageProp
               </div>
             </div>
             <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-3">Canaux</label>
+              <label className="block text-sm font-medium text-gray-700 mb-3">Canaux de diffusion</label>
               <div className="flex flex-wrap gap-3">
-                {['Email', 'Whatsapp'].map((canal) => (
+                {[
+                  { value: 'email', label: 'Email', icon: 'mail' },
+                  { value: 'whatsapp_pdf', label: 'WhatsApp PDF', icon: 'whatsapp' },
+                  { value: 'whatsapp_podcast', label: 'WhatsApp Podcast', icon: 'whatsapp' }
+                ].map((canal) => (
                   <button
-                    key={canal}
-                    onClick={() => toggleCanal(canal)}
+                    key={canal.value}
+                    onClick={() => toggleCanal(canal.value)}
                     className={`px-5 py-3 rounded-lg font-medium transition-all flex items-center gap-2 border-2 ${
-                      canauxDiffusion.includes(canal)
+                      canauxDiffusion.includes(canal.value)
                         ? 'bg-green-500 text-white border-green-600 shadow-md'
                         : 'bg-white text-gray-700 border-gray-300 hover:border-green-400 hover:bg-green-50'
                     }`}
                   >
-                    {canal === 'Email' ? <Mail size={18} /> : <MessageCircle size={18} />}
-                    {canal}
+                    {canal.icon === 'mail' ? <Mail size={18} /> : <MessageCircle size={18} />}
+                    {canal.label}
                   </button>
                 ))}
               </div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={alertesTempsReel}
-                  onChange={(e) => setAlertesTempsReel(e.target.checked)}
-                  className="w-5 h-5 text-orange-500 border-gray-300 rounded focus:ring-orange-500"
-                />
-                <div className="flex items-center gap-2">
-                  <Bell className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm font-medium text-gray-700">Activer les alertes en temps réel</span>
-                </div>
-              </label>
+              {(canauxDiffusion.includes('whatsapp_pdf') || canauxDiffusion.includes('whatsapp_podcast')) && (
+                <p className="mt-3 text-sm text-blue-600 flex items-start gap-2">
+                  <MessageCircle size={16} className="flex-shrink-0 mt-0.5" />
+                  <span>
+                    Assurez-vous de configurer votre numéro WhatsApp ci-dessous pour recevoir les rapports sur WhatsApp.
+                  </span>
+                </p>
+              )}
             </div>
           </div>
 
@@ -922,7 +904,6 @@ export default function SettingsPage({ onNavigateToDashboard }: SettingsPageProp
             </button>
           </div>
         </div>
-      </div>
     </div>
   );
 }

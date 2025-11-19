@@ -36,7 +36,6 @@ interface ClientConfig {
   frequence: string | null;
   heure_envoi: string | null;
   canaux_diffusion: string[];
-  alertes_temps_reel: boolean;
   status_onboarding: string;
   created_at: string;
   updated_at: string;
@@ -53,17 +52,36 @@ interface Rapport {
 
 interface VeilleDashboardProps {
   onNavigateToChat: () => void;
+  onNavigateToChatWithReset: () => void;
   onNavigateToSettings: () => void;
   onNavigateToHistorique: () => void;
   onNavigateToRAGAssistant?: () => void;
 }
 
-export default function VeilleDashboard({ onNavigateToChat, onNavigateToSettings, onNavigateToHistorique, onNavigateToRAGAssistant }: VeilleDashboardProps) {
+export default function VeilleDashboard({ onNavigateToChat, onNavigateToChatWithReset, onNavigateToSettings, onNavigateToHistorique, onNavigateToRAGAssistant }: VeilleDashboardProps) {
   const { user, signOut } = useAuth();
   const [config, setConfig] = useState<ClientConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ rapports_generes: 0, rapports_envoyes: 0 });
   const [rapports, setRapports] = useState<Rapport[]>([]);
+
+  // Fonction pour formatter les noms de canaux pour l'affichage
+  const formatCanalName = (canal: string): string => {
+    // Gestion des valeurs en minuscules (nouvelles valeurs)
+    if (canal === 'email') return 'Email';
+    if (canal === 'whatsapp_pdf') return 'WhatsApp PDF';
+    if (canal === 'whatsapp_podcast') return 'WhatsApp Podcast';
+
+    // Gestion des anciennes valeurs avec majuscules (rétrocompatibilité)
+    if (canal === 'Email') return 'Email';
+    if (canal === 'Whatsapp') return 'WhatsApp';
+
+    // Fallback: remplacer les underscores par des espaces et capitaliser
+    return canal
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
 
   useEffect(() => {
     loadConfig();
@@ -185,6 +203,35 @@ export default function VeilleDashboard({ onNavigateToChat, onNavigateToSettings
     }
   };
 
+  // Extraire le nom d'une entreprise depuis l'URL LinkedIn
+  const getLinkedInName = (url: string): string => {
+    try {
+      // Format: https://www.linkedin.com/company/nom-entreprise ou /in/prenom-nom
+      const companyMatch = url.match(/\/company\/([^\/\?]+)/);
+      const personMatch = url.match(/\/in\/([^\/\?]+)/);
+
+      if (companyMatch && companyMatch[1]) {
+        // Remplacer les tirets par des espaces et capitaliser chaque mot
+        return companyMatch[1]
+          .split('-')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+      }
+
+      if (personMatch && personMatch[1]) {
+        // Pour les profils personnels
+        return personMatch[1]
+          .split('-')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+      }
+
+      return url;
+    } catch {
+      return url;
+    }
+  };
+
   const getStatusBadge = () => {
     if (!config) return null;
 
@@ -238,68 +285,7 @@ export default function VeilleDashboard({ onNavigateToChat, onNavigateToSettings
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50/30 via-peach-50 to-orange-100/40">
-      {/* Header */}
-      <div className="bg-white/95 backdrop-blur-sm border-b border-orange-100 px-6 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="bg-gradient-to-br from-orange-500 to-coral-500 p-2 rounded-lg">
-            <Bell className="w-5 h-5 text-white" />
-          </div>
-          <span className="text-gray-900 font-bold text-xl">VEILLE IA</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={onNavigateToChat}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl transition-all font-medium border border-blue-200"
-            title="Modifier votre configuration via chat"
-          >
-            <MessageSquare size={16} />
-            Modifier ma configuration
-          </button>
-          {onNavigateToRAGAssistant && (
-            <button
-              onClick={onNavigateToRAGAssistant}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-gradient-to-r from-orange-500 to-coral-500 text-white hover:shadow-lg rounded-xl transition-all font-medium"
-              title="Interrogez votre historique de veilles avec l'IA"
-            >
-              <Sparkles size={16} />
-              Assistant IA
-            </button>
-          )}
-          <button
-            onClick={onNavigateToHistorique}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-orange-50 rounded-xl transition-all font-medium"
-          >
-            <History size={16} />
-            Historique
-          </button>
-          <button
-            onClick={onNavigateToSettings}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-orange-50 rounded-xl transition-all font-medium"
-          >
-            <Settings size={16} />
-            Paramètres
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-orange-500 to-coral-500 rounded-full flex items-center justify-center text-white font-bold">
-              {user?.email?.[0].toUpperCase()}
-            </div>
-            <div className="text-sm font-medium text-gray-900">
-              {config.prenom || user?.email}
-            </div>
-          </div>
-          <button
-            onClick={signOut}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-orange-50 rounded-xl transition-all font-medium"
-          >
-            <LogOut size={16} />
-            Déconnexion
-          </button>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
+    <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Status Banner */}
         <div className="mb-8 flex items-center justify-between">
           <div>
@@ -406,32 +392,26 @@ export default function VeilleDashboard({ onNavigateToChat, onNavigateToSettings
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-orange-100">
             <div className="flex items-center gap-3 mb-4">
               <div className="bg-blue-100 p-2 rounded-lg">
-                <Linkedin className="w-5 h-5 text-blue-600" />
+                <Linkedin className="w-5 h-5 text-blue-500" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900">Profils LinkedIn</h3>
             </div>
-            <div className="text-sm text-gray-600">
+            <div className="space-y-2">
               {config.profiles_linkedin.length > 0 ? (
-                <div className="space-y-2">
-                  {config.profiles_linkedin.slice(0, 3).map((profile, idx) => (
-                    <a
-                      key={idx}
-                      href={profile}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block text-blue-600 hover:underline truncate"
-                    >
-                      {profile}
-                    </a>
-                  ))}
-                  {config.profiles_linkedin.length > 3 && (
-                    <div className="text-gray-400 text-xs">
-                      +{config.profiles_linkedin.length - 3} autres profils
-                    </div>
-                  )}
-                </div>
+                config.profiles_linkedin.map((profile, idx) => (
+                  <a
+                    key={idx}
+                    href={profile}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-3 py-2 rounded-lg transition-colors"
+                  >
+                    <Linkedin className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                    <span className="text-sm font-medium">{getLinkedInName(profile)}</span>
+                  </a>
+                ))
               ) : (
-                <span className="text-gray-400">Aucun profil défini</span>
+                <span className="text-gray-400 text-sm">Aucun profil défini</span>
               )}
             </div>
           </div>
@@ -501,22 +481,13 @@ export default function VeilleDashboard({ onNavigateToChat, onNavigateToSettings
                         className="bg-green-100 text-green-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 border border-green-200"
                       >
                         <Mail className="w-4 h-4" />
-                        {canal}
+                        {formatCanalName(canal)}
                       </div>
                     ))
                   ) : (
                     <span className="text-gray-400 text-sm">Non défini</span>
                   )}
                 </div>
-              </div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <div className="flex items-center gap-2">
-                <Bell className="w-4 h-4 text-gray-400" />
-                <span className="text-sm text-gray-600">Alertes temps réel :</span>
-                <span className={`text-sm font-medium ${config.alertes_temps_reel ? 'text-green-600' : 'text-gray-400'}`}>
-                  {config.alertes_temps_reel ? 'Activées' : 'Désactivées'}
-                </span>
               </div>
             </div>
           </div>
@@ -660,7 +631,6 @@ export default function VeilleDashboard({ onNavigateToChat, onNavigateToSettings
             </div>
           </div>
         )}
-      </div>
     </div>
   );
 }
